@@ -14,19 +14,27 @@ def init_db():
             channel_name TEXT,
             content TEXT,
             link TEXT,
-            is_summarized INTEGER DEFAULT 0
+            is_summarized INTEGER DEFAULT 0,
+            media_path TEXT
         )
     ''')
+    
+    # 만약 기존 DB에 media_path 컬럼이 없다면 추가 (마이그레이션)
+    try:
+        c.execute('ALTER TABLE messages ADD COLUMN media_path TEXT')
+    except sqlite3.OperationalError:
+        pass # 이미 존재함
+        
     conn.commit()
     conn.close()
 
-def save_message(channel_name, content, link):
+def save_message(channel_name, content, link, media_path=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO messages (channel_name, content, link)
-        VALUES (?, ?, ?)
-    ''', (channel_name, content, link))
+        INSERT INTO messages (channel_name, content, link, media_path)
+        VALUES (?, ?, ?, ?)
+    ''', (channel_name, content, link, media_path))
     conn.commit()
     conn.close()
 
@@ -36,7 +44,7 @@ def get_unsummarized_messages():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
     c.execute('''
-        SELECT id, channel_name, content, link
+        SELECT id, channel_name, content, link, media_path
         FROM messages
         WHERE is_summarized = 0
     ''')
@@ -58,3 +66,18 @@ def mark_as_summarized(message_ids):
     ''', message_ids)
     conn.commit()
     conn.close()
+
+def get_recent_messages(limit=50):
+    """최근 메시지 목록을 가져옵니다."""
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute('''
+        SELECT id, channel_name, content, link, media_path
+        FROM messages
+        ORDER BY timestamp DESC
+        LIMIT ?
+    ''', (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
